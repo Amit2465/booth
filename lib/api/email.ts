@@ -12,7 +12,7 @@ export interface EmailData {
 // Get personalized email by session ID
 export async function getEmailBySession(sessionId: string): Promise<EmailData> {
   try {
-    const response = await fetch(`http://amit.heyvalsad.online:8080/v1/email/?session_id=${sessionId}`, {
+    const response = await fetch(`https://amit.heyvalsad.online/v1/email/?session_id=${sessionId}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -39,7 +39,7 @@ export async function sendEmail(toEmail: string, subject: string, content: strin
     formData.append("subject", subject)
     formData.append("content", content)
 
-    const response = await fetch("http://amit.heyvalsad.online:8080/v1/email/send", {
+    const response = await fetch("https://amit.heyvalsad.online/v1/email/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

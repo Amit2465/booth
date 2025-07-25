@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward the request to the actual API
-    const response = await fetch("http://amit.heyvalsad.online:8080/v1/card/ocr", {
+    const response = await fetch("https://amit.heyvalsad.online/v1/card/ocr", {
       method: "POST",
       body: formData,
     })

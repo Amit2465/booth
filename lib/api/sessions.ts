@@ -18,7 +18,7 @@ export interface UpdateSessionResponse {
 
 // Create a new session
 export async function createSession(): Promise<CreateSessionResponse> {
-  const response = await fetch("http://amit.heyvalsad.online:8080/v1/sessions/", {
+  const response = await fetch("https://amit.heyvalsad.online/v1/sessions/", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -34,7 +34,7 @@ export async function createSession(): Promise<CreateSessionResponse> {
 
 // Update session status
 export async function updateSession(sessionId: string, data: UpdateSessionRequest): Promise<UpdateSessionResponse> {
-  const response = await fetch(`http://amit.heyvalsad.online:8080/v1/sessions/${sessionId}`, {
+  const response = await fetch(`https://amit.heyvalsad.online/v1/sessions/${sessionId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -51,7 +51,7 @@ export async function updateSession(sessionId: string, data: UpdateSessionReques
 
 // Get session history
 export async function getSessionHistory(): Promise<any[]> {
-  const response = await fetch("http://amit.heyvalsad.online:8080/v1/sessions/", {
+  const response = await fetch("https://amit.heyvalsad.online/v1/sessions/", {
     method: "GET",
     headers: {
       "Content-Type": "application/json",

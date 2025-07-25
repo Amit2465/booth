@@ -25,7 +25,7 @@ export async function uploadCardForOCR(sessionId: string, imageBlob: Blob): Prom
     formData.append("session_id", sessionId)
     formData.append("file", imageBlob, "card.jpg")
 
-    const response = await fetch("http://amit.heyvalsad.online:8080/v1/card/ocr", {
+    const response = await fetch("https://amit.heyvalsad.online/v1/card/ocr", {
       method: "POST",
       body: formData,
     })

@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 export async function POST(request: NextRequest) {
   try {
     // Call the actual API endpoint
-    const response = await fetch("http://amit.heyvalsad.online:8080/v1/sessions/", {
+    const response = await fetch("https://amit.heyvalsad.online/v1/sessions/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
