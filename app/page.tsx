@@ -1,17 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { WelcomeScreen } from "@/components/welcome-screen"
-import { SessionScreen } from "@/components/session-screen"
-import { CameraCapture } from "@/components/camera-capture"
 import { AudioRecorder } from "@/components/audio-recorder"
-import { SessionHistory } from "@/components/session-history"
+import { CameraCapture } from "@/components/camera-capture"
+import { LoadingScreen } from "@/components/loading-screen"
 import { ProfileView } from "@/components/profile-view"
+import { SessionHistory } from "@/components/session-history"
+import { SessionScreen } from "@/components/session-screen"
+import { Toaster } from "@/components/ui/toaster"
+import { WelcomeScreen } from "@/components/welcome-screen"
 import { useSession } from "@/hooks/use-session"
 import { useToast } from "@/hooks/use-toast"
-import { Toaster } from "@/components/ui/toaster"
-import { LoadingScreen } from "@/components/loading-screen"
+import { AnimatePresence, motion } from "framer-motion"
+import { useEffect, useState } from "react"
 
 type AppScreen = "loading" | "welcome" | "session" | "camera" | "audio" | "history" | "profile"
 
@@ -22,15 +22,30 @@ export default function App() {
 
   useEffect(() => {
     const initializeApp = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      if (sessionId) {
-        setCurrentScreen("session")
-      } else {
+      try {
+        // Reduced initial loading time for better UX
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+
+        // Check for valid session
+        if (sessionId && sessionId.trim()) {
+          setCurrentScreen("session")
+        } else {
+          // Always default to welcome screen when no valid session exists
+          setCurrentScreen("welcome")
+        }
+      } catch (error) {
+        console.error("App initialization error:", error)
+        // On any error, show welcome screen
         setCurrentScreen("welcome")
+        toast({
+          title: "Session Error",
+          description: "Could not restore previous session. Please start a new one.",
+          variant: "destructive",
+        })
       }
     }
     initializeApp()
-  }, [sessionId])
+  }, [sessionId, toast])
 
   const handleStartSession = async () => {
     try {
@@ -83,7 +98,6 @@ export default function App() {
           >
             <WelcomeScreen
               onStartSession={handleStartSession}
-              onViewHistory={() => setCurrentScreen("history")}
               isLoading={isLoading}
             />
           </motion.div>
@@ -159,7 +173,7 @@ export default function App() {
             <SessionHistory onBack={() => setCurrentScreen(sessionId ? "session" : "welcome")} />
           </motion.div>
         )}
-        
+
         {currentScreen === "profile" && sessionId && (
           <motion.div
             key="profile"
@@ -169,7 +183,7 @@ export default function App() {
             exit="exit"
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            <ProfileView 
+            <ProfileView
               sessionId={sessionId}
               onBack={() => setCurrentScreen("session")}
               onEndSession={handleEndSession}
