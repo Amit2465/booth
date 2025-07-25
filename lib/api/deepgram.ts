@@ -47,10 +47,6 @@ export async function uploadAudioToDeepgram(sessionId: string, audioBlob: Blob):
     // Log successful response for debugging
     console.log("Audio upload successful:", { success: result.success, sessionId })
 
-    if (!result.success) {
-      throw new Error(result.error || "Audio processing failed")
-    }
-
     return result
   } catch (error) {
     console.error("Deepgram upload error:", error)
