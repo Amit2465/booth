@@ -229,7 +229,21 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
       // Upload to Deepgram API
       const result = await uploadAudioToDeepgram(sessionId, audioBlob)
 
+      if (result) {
+        // Import incrementAudioCount here to avoid circular dependencies
+        const { incrementAudioCount } = await import("@/lib/api/session-stats")
 
+        // Increment audio count in session stats
+        await incrementAudioCount(sessionId)
+
+        // Show success and return to session screen automatically
+        setShowSuccess(true)
+        setTimeout(() => {
+          onSuccess() // This will take user back to session screen
+        }, 1500)
+      } else {
+        throw new Error(result.error || "Audio upload failed")
+      }
     } catch (error: any) {
       console.error("Upload error:", error)
       toast({
