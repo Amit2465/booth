@@ -14,7 +14,7 @@ export async function uploadAudioToDeepgram(sessionId: string, audioBlob: Blob):
     formData.append("session_id", sessionId)
     formData.append("audio", audioBlob)
 
-    const response = await fetch("http://13.203.102.165:8080/v1/deepgram/", {
+    const response = await fetch("http://amit.heyvalsad.online:8080/v1/deepgram/", {
       method: "POST",
       body: formData,
     })
@@ -25,7 +25,7 @@ export async function uploadAudioToDeepgram(sessionId: string, audioBlob: Blob):
     }
 
     const result = await response.json()
-    
+
     if (!result.success) {
       throw new Error(result.error || "Audio processing failed")
     }

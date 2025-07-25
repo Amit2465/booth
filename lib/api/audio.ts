@@ -48,7 +48,7 @@ export async function uploadAudioHTTP(sessionId: string, audioBlob: Blob): Promi
   formData.append("session_id", sessionId)
   formData.append("audio", audioBlob, "recording.webm")
 
-  const response = await fetch("http://13.203.102.165:8080/v1/audio/upload", {
+  const response = await fetch("http://amit.heyvalsad.online:8080/v1/audio/upload", {
     method: "POST",
     body: formData,
   })

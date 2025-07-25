@@ -31,7 +31,7 @@ export interface EmailTemplate {
 // Get leads by session
 export async function getLeadsBySession(sessionId: string): Promise<Lead[]> {
   try {
-    const response = await fetch(`http://13.203.102.165:8080/v1/leads?session_id=${sessionId}`, {
+    const response = await fetch(`http://amit.heyvalsad.online:8080/v1/leads?session_id=${sessionId}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -52,7 +52,7 @@ export async function getLeadsBySession(sessionId: string): Promise<Lead[]> {
 // Get email template by session ID
 export async function getEmailBySession(sessionId: string): Promise<EmailTemplate> {
   try {
-    const response = await fetch(`http://13.203.102.165:8080/v1/email/?session_id=${sessionId}`, {
+    const response = await fetch(`http://amit.heyvalsad.online:8080/v1/email/?session_id=${sessionId}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -79,7 +79,7 @@ export async function sendEmail(toEmail: string, subject: string, content: strin
     formData.append('subject', subject)
     formData.append('content', content)
 
-    const response = await fetch(`http://13.203.102.165:8080/v1/email/send`, {
+    const response = await fetch(`http://amit.heyvalsad.online:8080/v1/email/send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

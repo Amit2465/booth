@@ -3,19 +3,19 @@ import { type NextRequest, NextResponse } from "next/server"
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    
+
     const sessionId = formData.get("session_id")
     const image = formData.get("image")
-    
+
     if (!sessionId || !image) {
       return NextResponse.json(
-        { success: false, error: "Missing session_id or image" }, 
+        { success: false, error: "Missing session_id or image" },
         { status: 400 }
       )
     }
 
     // Forward the request to the actual API
-    const response = await fetch("http://13.203.102.165:8080/v1/card/ocr", {
+    const response = await fetch("http://amit.heyvalsad.online:8080/v1/card/ocr", {
       method: "POST",
       body: formData,
     })
@@ -45,10 +45,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("OCR processing error:", error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Failed to process card" 
-      }, 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to process card"
+      },
       { status: 500 }
     )
   }
