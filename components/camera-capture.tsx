@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Camera, Check, RotateCcw, Send, SwitchCamera } from "lucide-react"
 import { uploadCardForOCR } from "@/lib/api/card-ocr"
+import { AnimatePresence, motion } from "framer-motion"
+import { ArrowLeft, Camera, RotateCcw, Send, SwitchCamera } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 interface CameraCaptureProps {
   sessionId: string
@@ -35,8 +35,8 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
       setAvailableCameras(videoDevices)
       if (videoDevices.length > 0 && !currentCameraId) {
         // Prefer back camera if available
-        const backCamera = videoDevices.find(device => 
-          device.label.toLowerCase().includes('back') || 
+        const backCamera = videoDevices.find(device =>
+          device.label.toLowerCase().includes('back') ||
           device.label.toLowerCase().includes('environment')
         )
         setCurrentCameraId(backCamera?.deviceId || videoDevices[0].deviceId)
@@ -53,11 +53,27 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
     }
   }, [sessionId])
 
+  // Prevent auto-zoom on mobile devices
+  useEffect(() => {
+    const metaViewport = document.querySelector('meta[name=viewport]');
+    const originalContent = metaViewport?.getAttribute('content');
+
+    // Set viewport to prevent zooming
+    metaViewport?.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0');
+
+    return () => {
+      // Restore original viewport settings
+      if (originalContent) {
+        metaViewport?.setAttribute('content', originalContent);
+      }
+    };
+  }, []);
+
   const startCamera = useCallback(async () => {
     try {
       setCameraError(null)
       setIsCameraReady(false)
-      
+
       // Stop existing stream
       if (stream) {
         stream.getTracks().forEach((track) => track.stop())
@@ -65,10 +81,12 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
 
       const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: window.innerWidth, max: 3840 },
-          height: { ideal: window.innerHeight, max: 2160 },
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
           frameRate: { ideal: 30, max: 30 },
-        },
+          // Add focus mode constraints
+          focusMode: { ideal: 'continuous' }
+        } as MediaTrackConstraints
       }
 
       // Use specific camera if available, otherwise use facingMode
@@ -78,29 +96,66 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
         (constraints.video as MediaTrackConstraints).facingMode = facingMode
       }
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-      setStream(mediaStream)
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
-        videoRef.current.onloadedmetadata = () => {
-          setIsCameraReady(true)
-          // Ensure video is playing
-          if (videoRef.current) {
-            videoRef.current.play().catch(console.error)
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
+
+        // Apply additional track constraints
+        const videoTrack = mediaStream.getVideoTracks()[0]
+        if (videoTrack) {
+          try {
+            // Remove unsupported constraints for TypeScript compatibility
+            await videoTrack.applyConstraints({})
+          } catch (constraintError) {
+            console.warn('Could not apply advanced constraints:', constraintError)
           }
         }
-        
-        // Handle video loading errors
-        videoRef.current.onerror = (error) => {
-          console.error("Video error:", error)
-          setCameraError("Failed to load camera stream. Please try again.")
+
+        setStream(mediaStream)
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream
+          // Add playsinline attribute to prevent fullscreen on iOS
+          videoRef.current.setAttribute('playsinline', 'true')
+          videoRef.current.setAttribute('webkit-playsinline', 'true')
+
+          videoRef.current.onloadedmetadata = () => {
+            setIsCameraReady(true)
+            // Ensure video is playing
+            if (videoRef.current) {
+              videoRef.current.play().catch(console.error)
+            }
+          }
+
+          // Handle video loading errors
+          videoRef.current.onerror = (error) => {
+            console.error("Video error:", error)
+            setCameraError("Failed to load camera stream. Please try again.")
+          }
+        }
+      } catch (error: any) {
+        // If initial constraints fail, try with basic constraints
+        console.warn('Falling back to basic constraints')
+        const basicConstraints = {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        }
+
+        const basicStream = await navigator.mediaDevices.getUserMedia(basicConstraints)
+        setStream(basicStream)
+        if (videoRef.current) {
+          videoRef.current.srcObject = basicStream
+          videoRef.current.setAttribute('playsinline', 'true')
+          videoRef.current.setAttribute('webkit-playsinline', 'true')
+          videoRef.current.onloadedmetadata = () => setIsCameraReady(true)
         }
       }
     } catch (error: any) {
       console.error("Camera access error:", error)
       let errorMessage = "Camera access is required to scan cards. Please allow permissions and try again."
-      
+
       if (error.name === 'NotFoundError') {
         errorMessage = "No camera found. Please connect a camera and try again."
       } else if (error.name === 'NotAllowedError') {
@@ -124,7 +179,7 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
           console.error("Retry failed:", retryError)
         }
       }
-      
+
       setCameraError(errorMessage)
     }
   }, [stream, facingMode, currentCameraId])
@@ -146,17 +201,17 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
     const currentIndex = availableCameras.findIndex(camera => camera.deviceId === currentCameraId)
     const nextIndex = (currentIndex + 1) % availableCameras.length
     const nextCamera = availableCameras[nextIndex]
-    
+
     setCurrentCameraId(nextCamera.deviceId)
-    
+
     // Update facing mode based on camera label
-    if (nextCamera.label.toLowerCase().includes('front') || 
-        nextCamera.label.toLowerCase().includes('user')) {
+    if (nextCamera.label.toLowerCase().includes('front') ||
+      nextCamera.label.toLowerCase().includes('user')) {
       setFacingMode("user")
     } else {
       setFacingMode("environment")
     }
-    
+
     // Restart camera with new settings
     await startCamera()
   }, [availableCameras, currentCameraId, startCamera])
@@ -166,11 +221,11 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
       setCameraError("Camera not ready or session missing. Please try again.")
       return
     }
-    
+
     const video = videoRef.current
     const canvas = canvasRef.current
     const context = canvas.getContext("2d")
-    
+
     if (!context) {
       setCameraError("Failed to access camera context.")
       return
@@ -179,11 +234,11 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
-    
+
     // Clear canvas and draw video frame
     context.clearRect(0, 0, canvas.width, canvas.height)
     context.drawImage(video, 0, 0, canvas.width, canvas.height)
-    
+
     // Convert to blob with high quality
     canvas.toBlob(
       (blob) => {
@@ -216,7 +271,7 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
       setCameraError("No image or session found. Please retake the photo or start a new session.")
       return
     }
-    
+
     setIsUploading(true)
     try {
       const canvas = canvasRef.current
@@ -226,16 +281,16 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
           else reject(new Error("Failed to create image blob"))
         }, "image/jpeg", 0.95)
       })
-      
+
       const result = await uploadCardForOCR(sessionId, blob)
-      
+
       if (result.success) {
         // Import incrementCardCount here to avoid circular dependencies
         const { incrementCardCount } = await import("@/lib/api/session-stats")
-        
+
         // Increment card count in session stats
         incrementCardCount(sessionId)
-        
+
         setShowSuccess(true)
         setTimeout(() => {
           onSuccess()
@@ -259,9 +314,9 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
         await startCamera()
       }
     }
-    
+
     initCamera()
-    
+
     return () => {
       stopCamera()
       if (capturedImage) {
@@ -333,20 +388,20 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                transition={{ 
-                  delay: 0.2, 
-                  type: "spring", 
-                  stiffness: 200 
+                transition={{
+                  delay: 0.2,
+                  type: "spring",
+                  stiffness: 200
                 }}
                 className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6"
               >
                 <motion.div
-                  animate={{ 
+                  animate={{
                     rotate: 360,
-                    transition: { 
-                      repeat: Infinity, 
+                    transition: {
+                      repeat: Infinity,
                       duration: 2,
-                      ease: "linear" 
+                      ease: "linear"
                     }
                   }}
                   className="w-12 h-12 rounded-full border-2 border-t-blue-500 border-r-blue-500 border-b-transparent border-l-transparent"
@@ -376,26 +431,26 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-40 pt-12 px-6 pb-6 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
         <div className="flex items-center justify-between">
-          <Button 
-            onClick={onBack} 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            onClick={onBack}
+            variant="ghost"
+            size="sm"
             className="text-white hover:bg-white/20 w-10 h-10 rounded-full p-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          
+
           <div className="text-center">
             <h2 className="text-white font-semibold text-lg">Scan Card</h2>
             <p className="text-white/80 text-sm">Position card within the frame</p>
           </div>
-          
+
           {/* Camera Switch Button */}
           {availableCameras.length > 1 && !capturedImage && (
-            <Button 
-              onClick={switchCamera} 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              onClick={switchCamera}
+              variant="ghost"
+              size="sm"
               className="text-white hover:bg-white/20 w-10 h-10 rounded-full p-0"
               disabled={!isCameraReady}
             >
@@ -410,15 +465,18 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
       {!capturedImage ? (
         <>
           {/* Full screen video - fixed height/width to cover entire screen */}
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
             className="absolute inset-0 min-h-screen min-w-full w-auto h-auto object-cover"
-            style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+            style={{
+              transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+              touchAction: 'none' // Prevent touch interactions from causing zoom
+            }}
           />
-          
+
           {/* Card Scanning Overlay - Adding a business card frame guide */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="relative w-[90%] max-w-sm aspect-[1.6/1] rounded-lg border-2 border-white/70 overflow-hidden">
@@ -433,14 +491,14 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
           {/* Overlay with better blur effect outside scanning area */}
           <div className="absolute inset-0">
             {/* Card scanning area with mask - this creates a clearer center while blurring outside */}
-            <div 
-              className="absolute inset-0 backdrop-blur-sm bg-black/40" 
+            <div
+              className="absolute inset-0 backdrop-blur-sm bg-black/40"
               style={{
                 maskImage: 'radial-gradient(ellipse at center, transparent 55%, black 70%)',
                 WebkitMaskImage: 'radial-gradient(ellipse at center, transparent 55%, black 70%)'
               }}
             />
-            
+
             {/* Center card guide overlay */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="relative w-[85%] aspect-[16/10] max-w-md">
@@ -448,28 +506,28 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                 <div className="absolute inset-0 border-2 border-white/80 rounded-xl shadow-lg">
                   {/* Animated corner indicators - cleaner design */}
                   <div className="absolute -top-1 -left-1 w-6 h-6">
-                    <motion.div 
+                    <motion.div
                       className="absolute top-0 left-0 w-full h-full border-t-2 border-l-2 border-blue-400 rounded-tl"
                       animate={{ opacity: [0.6, 1, 0.6] }}
                       transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
                     />
                   </div>
                   <div className="absolute -top-1 -right-1 w-6 h-6">
-                    <motion.div 
+                    <motion.div
                       className="absolute top-0 right-0 w-full h-full border-t-2 border-r-2 border-blue-400 rounded-tr"
                       animate={{ opacity: [0.6, 1, 0.6] }}
                       transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.5 }}
                     />
                   </div>
                   <div className="absolute -bottom-1 -left-1 w-6 h-6">
-                    <motion.div 
+                    <motion.div
                       className="absolute bottom-0 left-0 w-full h-full border-b-2 border-l-2 border-blue-400 rounded-bl"
                       animate={{ opacity: [0.6, 1, 0.6] }}
                       transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 1 }}
                     />
                   </div>
                   <div className="absolute -bottom-1 -right-1 w-6 h-6">
-                    <motion.div 
+                    <motion.div
                       className="absolute bottom-0 right-0 w-full h-full border-b-2 border-r-2 border-blue-400 rounded-br"
                       animate={{ opacity: [0.6, 1, 0.6] }}
                       transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 1.5 }}
@@ -479,21 +537,21 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                   {/* Scanning line animation */}
                   <motion.div
                     className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent"
-                    animate={{ 
+                    animate={{
                       y: [10, '95%', 10],
                       opacity: [0.4, 1, 0.4]
                     }}
-                    transition={{ 
-                      duration: 2.5, 
-                      repeat: Number.POSITIVE_INFINITY, 
-                      ease: "easeInOut" 
+                    transition={{
+                      duration: 2.5,
+                      repeat: Number.POSITIVE_INFINITY,
+                      ease: "easeInOut"
                     }}
                   />
                 </div>
               </div>
             </div>
           </div>
-          
+
           {/* Instruction text */}
           <div className="absolute bottom-72 left-0 right-0 text-center">
             <motion.p
@@ -510,7 +568,7 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
           {!isCameraReady && (
             <div className="absolute top-24 left-6 right-6 z-30">
               <div className="flex items-center justify-center">
-                <motion.div 
+                <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   className="px-4 py-2 rounded-full text-sm font-medium bg-yellow-500/90 text-yellow-900 backdrop-blur-sm"
@@ -540,11 +598,10 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
               )}
 
               {/* Inner button with improved styling */}
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${
-                isCameraReady 
-                  ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
-                  : 'bg-gray-400'
-              }`}>
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${isCameraReady
+                ? 'bg-gradient-to-br from-blue-500 to-blue-600'
+                : 'bg-gray-400'
+                }`}>
                 <Camera className="w-7 h-7 text-white" />
               </div>
             </motion.button>
@@ -593,14 +650,14 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                 <div className="relative mb-8 mx-auto w-32 h-32">
                   {/* Background card */}
                   <div className="absolute inset-0 rounded-md bg-blue-500/10 border border-blue-400/30"></div>
-                  
+
                   {/* Scanning line */}
-                  <motion.div 
+                  <motion.div
                     className="absolute top-0 left-0 right-0 h-0.5 bg-blue-400"
                     animate={{ top: ['0%', '100%', '0%'] }}
                     transition={{ duration: 3, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
                   />
-                  
+
                   {/* Animated OCR points */}
                   <motion.div
                     className="absolute w-full h-full"
@@ -610,12 +667,12 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                       <motion.div
                         key={i}
                         className="absolute w-1.5 h-1.5 bg-blue-400 rounded-full"
-                        initial={{ 
-                          x: Math.random() * 100 + '%', 
+                        initial={{
+                          x: Math.random() * 100 + '%',
                           y: Math.random() * 100 + '%',
                           opacity: 0
                         }}
-                        animate={{ 
+                        animate={{
                           opacity: [0, 1, 0],
                           scale: [0.8, 1.2, 0.8]
                         }}
@@ -627,10 +684,10 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                       />
                     ))}
                   </motion.div>
-                  
+
                   {/* Pulsing circles */}
                   <motion.div
-                    animate={{ 
+                    animate={{
                       scale: [1, 1.1, 1],
                       opacity: [0.3, 0.8, 0.3],
                       rotateZ: [0, 90]
@@ -639,7 +696,7 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                     className="absolute top-1/2 left-1/2 w-16 h-16 border border-blue-400/50 rounded-full transform -translate-x-1/2 -translate-y-1/2"
                   />
                   <motion.div
-                    animate={{ 
+                    animate={{
                       scale: [1.1, 1, 1.1],
                       opacity: [0.5, 1, 0.5],
                       rotateZ: [0, -90]
@@ -656,7 +713,7 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                 >
                   Analyzing Card
                 </motion.h3>
-                
+
                 {/* Better progress animation */}
                 <div className="h-2 bg-blue-900/30 rounded-full mb-4 overflow-hidden">
                   <motion.div
@@ -672,7 +729,7 @@ export function CameraCapture({ sessionId, onBack, onSuccess }: CameraCapturePro
                     />
                   </motion.div>
                 </div>
-                
+
                 <p className="text-white/90 text-sm">
                   Extracting contact information...
                 </p>

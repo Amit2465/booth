@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { ArrowLeftIcon, CheckIcon, MicrophoneIcon, PauseIcon, PlayIcon, StopIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeftIcon, MicrophoneIcon, PlayIcon, PauseIcon, StopIcon, CheckIcon } from "@/components/icons"
 import { useToast } from "@/hooks/use-toast"
 import { uploadAudioToDeepgram } from "@/lib/api/deepgram"
+import { AnimatePresence, motion } from "framer-motion"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 interface AudioRecorderProps {
   sessionId: string
@@ -15,6 +16,7 @@ interface AudioRecorderProps {
 }
 
 export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderProps) {
+  const router = useRouter()
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [duration, setDuration] = useState(0)
@@ -38,11 +40,14 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
   const startMicrophone = useCallback(async () => {
     try {
       setMicError(null)
+      // Mobile-optimized audio constraints
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           sampleRate: 44100,
+          autoGainControl: true, // Help with varying mobile mic levels
+          channelCount: 1, // Mono recording for better compatibility
         },
       })
 
@@ -72,7 +77,7 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: "audio/webm" })
         setAudioBlob(blob)
-        
+
         // Create audio URL for playback
         const url = URL.createObjectURL(blob)
         setAudioUrl(url)
@@ -173,7 +178,7 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
 
   const togglePlayback = useCallback(() => {
     if (!audioRef.current || !audioUrl) return;
-    
+
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
@@ -182,70 +187,74 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
       setIsPlaying(true);
     }
   }, [audioUrl, isPlaying]);
-  
+
   // Setup audio playback
   useEffect(() => {
     if (!audioRef.current || !audioUrl) return;
-    
+
     const audio = audioRef.current;
-    
+
     const handleEnded = () => {
       setIsPlaying(false);
     };
-    
+
     const handlePlay = () => {
       setIsPlaying(true);
     };
-    
+
     const handlePause = () => {
       setIsPlaying(false);
     };
-    
+
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
-    
+
     // Set the source of the audio element
     audio.src = audioUrl;
-    
+
     return () => {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
     };
   }, [audioUrl]);
-  
+
   const saveRecording = useCallback(async () => {
     if (!audioBlob) return
 
     setIsUploading(true)
 
     try {
-      // Upload to Deepgram API instead of audio API as requested
+      // Upload to Deepgram API
       const result = await uploadAudioToDeepgram(sessionId, audioBlob)
-      
+
       if (result.success) {
         // Import incrementAudioCount here to avoid circular dependencies
         const { incrementAudioCount } = await import("@/lib/api/session-stats")
-        
+
         // Increment audio count in session stats
-        incrementAudioCount(sessionId)
-        
+        await incrementAudioCount(sessionId)
+
         // Show success and return to session screen automatically
         setShowSuccess(true)
         setTimeout(() => {
           onSuccess() // This will take user back to session screen
         }, 1500)
       } else {
-        throw new Error("Audio upload failed")
+        throw new Error(result.error || "Audio upload failed")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error)
       toast({
         title: "Upload Failed",
-        description: "Couldn't save the audio. Please try again.",
+        description: error.message || "Couldn't save the audio. Please check your connection and try again.",
         variant: "destructive",
       })
+      // Navigate to landing page on error after showing toast
+      setTimeout(() => {
+        router.push('/')
+      }, 2000)
     } finally {
       setIsUploading(false)
     }
@@ -263,7 +272,7 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
     // This is handled by the audio player setup we added earlier
     // Just keeping this effect to avoid breaking the component structure
   }, [audioUrl])
-  
+
   useEffect(() => {
     startMicrophone()
     return () => {
@@ -300,8 +309,31 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
     )
   }
 
+  // Add hook for mobile detection
+  const isMobile = typeof window !== 'undefined' &&
+    (navigator.userAgent.match(/Android/i) ||
+      navigator.userAgent.match(/webOS/i) ||
+      navigator.userAgent.match(/iPhone/i) ||
+      navigator.userAgent.match(/iPad/i) ||
+      navigator.userAgent.match(/iPod/i) ||
+      navigator.userAgent.match(/BlackBerry/i) ||
+      navigator.userAgent.match(/Windows Phone/i));
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white safe-area-inset-bottom">
+      {/* Prevent pull-to-refresh on mobile */}
+      <style jsx global>{`
+        body {
+          overscroll-behavior-y: contain;
+        }
+        .safe-area-inset-bottom {
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+        /* Prevent double-tap zoom */
+        * { 
+          touch-action: manipulation;
+        }
+      `}</style>
       {/* Success Overlay */}
       <AnimatePresence>
         {showSuccess && (
@@ -373,13 +405,17 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
         </Card>
 
         {/* Control Buttons */}
-        <div className="flex items-center space-x-6">
+        <div className="flex items-center space-x-6 touch-none">
           {!isRecording ? (
             <Button
               onClick={startRecording}
-              className="w-24 h-24 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-2xl"
+              className="w-20 h-20 md:w-24 md:h-24 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-2xl active:transform active:scale-95 transition-transform"
+              style={{
+                WebkitTapHighlightColor: 'transparent',
+                touchAction: 'manipulation'
+              }}
             >
-              <MicrophoneIcon className="w-10 h-10" />
+              <MicrophoneIcon className="w-8 h-8 md:w-10 md:h-10" />
             </Button>
           ) : (
             <div className="flex items-center space-x-4">
@@ -409,38 +445,41 @@ export function AudioRecorder({ sessionId, onBack, onSuccess }: AudioRecorderPro
           >
             {/* Hidden audio element */}
             <audio ref={audioRef} className="hidden" />
-            
+
             {/* Audio Player */}
             <div className="bg-gray-50 rounded-2xl p-4 flex items-center shadow-sm">
               <Button
                 onClick={togglePlayback}
-                className={`w-12 h-12 rounded-full flex-shrink-0 ${
-                  isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600"
-                }`}
+                className={`w-14 h-14 md:w-12 md:h-12 rounded-full flex-shrink-0 active:transform active:scale-95 transition-transform ${isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600"
+                  }`}
+                style={{
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation'
+                }}
               >
-                {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
+                {isPlaying ? <PauseIcon className="w-6 h-6 md:w-5 md:h-5" /> : <PlayIcon className="w-6 h-6 md:w-5 md:h-5" />}
               </Button>
-              
+
               <div className="flex-1 mx-4">
                 <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                   {audioRef.current && (
-                    <div 
-                      className="h-full bg-blue-500" 
-                      style={{ 
-                        width: `${audioRef.current.duration ? (audioRef.current.currentTime / audioRef.current.duration) * 100 : 0}%` 
+                    <div
+                      className="h-full bg-blue-500"
+                      style={{
+                        width: `${audioRef.current.duration ? (audioRef.current.currentTime / audioRef.current.duration) * 100 : 0}%`
                       }}
                     />
                   )}
                 </div>
               </div>
-              
+
               <span className="text-sm text-gray-600 font-mono">
                 {formatTime(duration)}
               </span>
-              
+
               {/* Audio element is already defined at the top of this component */}
             </div>
-            
+
             <Button
               onClick={saveRecording}
               disabled={isUploading}
